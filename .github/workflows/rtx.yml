@@ -1,14 +1,10 @@
 name: rtx
 
-# ✅ Allow this workflow to push back to the repo
 permissions:
   contents: write
 
 on:
-  # You can still run it manually
-  workflow_dispatch:
-  schedule:
-    - cron: '0 * * * 1'   # hourly Mondays
+  workflow_dispatch:  # manual runs while we debug
 
 jobs:
   run:
@@ -19,7 +15,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          persist-credentials: true  # keep token for pushing
+          persist-credentials: true
+
+      - name: Show working dir
+        run: |
+          pwd
+          ls -la
+          echo "---- tree rt ----"
+          ls -la rt || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,30 +34,48 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests beautifulsoup4
 
-      - name: Run generator
-        # PYTHONPATH ensures imports like "from ingest import ..." work when running rt/runner.py
+      - name: Run generator (with PYTHONPATH=rt)
         env:
           PYTHONPATH: rt
         run: |
+          set -euxo pipefail
           python rt/runner.py
 
-      - name: Show outputs (for debugging)
+      - name: List outputs
         run: |
-          echo "==== repo tree ===="
+          echo "---- repo root ----"
           ls -la
-          echo "==== artifacts ===="
+          echo "---- artifacts ----"
           ls -la artifacts || true
-          echo "==== idx.json preview ===="
-          (test -f artifacts/idx.json && head -n 30 artifacts/idx.json) || echo "no idx.json"
+          if test -f artifacts/idx.json; then
+            echo "---- idx.json head ----"
+            head -n 40 artifacts/idx.json
+          else
+            echo "idx.json NOT FOUND"
+          fi
 
-      - name: Prepare git (avoid safe.directory error)
+      - name: Upload artifacts from job (for inspection)
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-artifacts
+          path: artifacts/*
+          if-no-files-found: warn
+
+      - name: Prepare git
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Show git status before commit
+        run: |
+          git status
+          echo "---- changed files ----"
+          git ls-files -m -o --exclude-standard || true
+
       - name: Commit outputs
         run: |
+          set -euxo pipefail
           git add artifacts/*.csv artifacts/idx.json 2>/dev/null || true
           git commit -m "refresh $(date -Iseconds)" || echo "No changes"
           git push
