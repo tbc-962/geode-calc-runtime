@@ -7,7 +7,8 @@ permissions:
 on:
   # You can still run it manually
   workflow_dispatch:
-  # (Add the scheduler back later once we're green)
+  schedule:
+    - cron: '0 * * * 1'   # hourly Mondays
 
 jobs:
   run:
