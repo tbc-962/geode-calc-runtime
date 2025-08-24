@@ -1,8 +1,13 @@
 name: rtx
+
+# ✅ Allow this workflow to push back to the repo
+permissions:
+  contents: write
+
 on:
-  schedule:
-    - cron: '0 * * * 1'  # every hour on Monday
+  # You can still run it manually
   workflow_dispatch:
+  # (Add the scheduler back later once we're green)
 
 jobs:
   run:
@@ -10,24 +15,45 @@ jobs:
     env:
       TZ: Australia/Sydney
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: pip install requests beautifulsoup4
-      - name: Gate to exactly 17:00 local on Mondays
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # keep token for pushing
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
         run: |
-          DOW=$(date +'%u')
-          HOUR=$(date +'%H')
-          if [ "$DOW" != "1" ] || [ "$HOUR" != "17" ]; then
-            echo "Not Monday 17:00 Australia/Sydney; exiting."
-            exit 0
-          fi
-      - run: python -m pip install --upgrade pip
-      - run: python rt/runner.py
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4
+
+      - name: Run generator
+        # PYTHONPATH ensures imports like "from ingest import ..." work when running rt/runner.py
+        env:
+          PYTHONPATH: rt
+        run: |
+          python rt/runner.py
+
+      - name: Show outputs (for debugging)
+        run: |
+          echo "==== repo tree ===="
+          ls -la
+          echo "==== artifacts ===="
+          ls -la artifacts || true
+          echo "==== idx.json preview ===="
+          (test -f artifacts/idx.json && head -n 30 artifacts/idx.json) || echo "no idx.json"
+
+      - name: Prepare git (avoid safe.directory error)
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@users.noreply.github.com"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Commit outputs
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@users.noreply.github.com"
-          git add artifacts/*.csv artifacts/idx.json || true
+          git add artifacts/*.csv artifacts/idx.json 2>/dev/null || true
           git commit -m "refresh $(date -Iseconds)" || echo "No changes"
           git push
