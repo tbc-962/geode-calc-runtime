@@ -33,7 +33,7 @@ def parse_vg_rows(vg_rows: List[Dict]) -> List[Dict]:
             "_type": prop_type,
             "_land_sqm": land,
             "_sold_price": sold_price,
-            "_sold_date": date_str,   # parsed later in medians
+            "_sold_date": date_str,
             "_source": "VG",
             "_flags": []
         })
@@ -44,38 +44,46 @@ def apply_hard_filters(rows: List[Dict]) -> List[Dict]:
 
 def label_categories(rows: List[Dict]) -> None:
     for r in rows:
-        # Note: without enrichment for beds/baths/cars, many rows will not meet category bands and will be dropped.
-        cat = label_category(r["_type"], r.get("beds"), r.get("baths"), r.get("cars"))
-        r["_category"] = cat
+        r["_category"] = label_category(r["_type"], r.get("beds"), r.get("baths"), r.get("cars"))
 
 def main():
     asof = datetime.now()
-    # 1) Fetch weekly PSI for target LGAs
+    print("[1] Fetching weekly PSI for LGAs:", TARGET_LGAS)
     vg_by_lga = fetch_weekly_lgas(TARGET_LGAS)
+    total_raw = sum(len(v) for v in vg_by_lga.values())
+    print(f"[1] Raw rows from VG (all LGAs): {total_raw}")
+
     vg_rows = []
-    for _, rows in vg_by_lga.items():
-        vg_rows.extend(parse_vg_rows(rows))
+    for lga, rows in vg_by_lga.items():
+        parsed = parse_vg_rows(rows)
+        vg_rows.extend(parsed)
+        print(f"    - {lga}: {len(rows)} rows, parsed {len(parsed)}")
 
-    # 2) Price/type filters
+    print(f"[2] Parsed total rows: {len(vg_rows)}")
     filtered = apply_hard_filters(vg_rows)
+    print(f"[3] After price/type filters (A$1–2m, house/townhouse/duplex/villa): {len(filtered)}")
 
-    # 3) (Optional) Enrichment could fill beds/baths/cars here
-
-    # 4) Categorise into 8 buckets
+    # No enrichment yet; most rows won't meet 3x2x1 or 4+2+1+, but we still proceed
     label_categories(filtered)
+    categories = {}
+    for r in filtered:
+        categories[r["_category"]] = categories.get(r["_category"], 0) + 1
+    print("[4] Category counts:", categories)
     filtered = [r for r in filtered if r["_category"] != "other"]
+    print(f"[4] Rows that fit your 8 categories (without enrichment): {len(filtered)}")
 
-    # 5) Dedupe
     deduped = dedupe_by_sale(filtered)
+    print(f"[5] After de-duplication: {len(deduped)}")
 
-    # 6) Medians
     med = compute_medians(deduped, asof)
+    print(f"[6] Median buckets computed: {len(med)}")
 
-    # 7) Trends (placeholder; add later)
+    # Trends placeholders (none yet)
     trends = { r["_suburb"]: {"1y": (None,None), "5y": (None,None), "10y": (None,None)} for r in deduped }
 
-    # 8) Emit artifacts
+    os.makedirs("artifacts", exist_ok=True)
     write_outputs(deduped, med, trends, outdir="artifacts")
+    print("[7] Wrote outputs to artifacts/. Expect idx.json + up to 8 CSVs if any rows matched.")
 
 if __name__ == "__main__":
     main()
