@@ -73,6 +73,17 @@ jobs:
           echo "---- changed files ----"
           git ls-files -m -o --exclude-standard || true
 
+      - name: Ensure idx.json exists (safety net)
+        run: |
+          mkdir -p artifacts
+          if [ ! -f artifacts/idx.json ]; then
+            echo '{"files":[],"summary":{}}' > artifacts/idx.json
+            echo "Created minimal artifacts/idx.json"
+          else
+            echo "artifacts/idx.json already exists"
+          fi
+          ls -la artifacts
+          
       - name: Commit outputs
         run: |
           set -euxo pipefail
