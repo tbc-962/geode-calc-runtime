@@ -52,6 +52,9 @@ def _read_dat_from_zip(content: bytes) -> Iterable[Dict[str, str]]:
 
 def fetch_weekly_lgas(target_lgas: List[str]) -> Dict[str, List[Dict[str, str]]]:
     session = requests.Session()
+    session = requests.Session()
+session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; DataRoutine/1.0; +https://example.org/)"})
+
     weekly_url = _latest_week_url(session)
     lga_urls = _list_lga_zip_urls(session, weekly_url)
     out: Dict[str, List[Dict[str, str]]] = {lga: [] for lga in target_lgas}
