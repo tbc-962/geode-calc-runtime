@@ -47,9 +47,14 @@ def label_categories(rows: List[Dict]) -> None:
         r["_category"] = label_category(r["_type"], r.get("beds"), r.get("baths"), r.get("cars"))
 
 def main():
+    os.makedirs("artifacts", exist_ok=True)
+
     asof = datetime.now()
     print("[1] Fetching weekly PSI for LGAs:", TARGET_LGAS)
     vg_by_lga = fetch_weekly_lgas(TARGET_LGAS)
+    for lga in TARGET_LGAS:
+        print(f"    - {lga}: {len(vg_by_lga.get(lga, []))} raw rows")
+
     total_raw = sum(len(v) for v in vg_by_lga.values())
     print(f"[1] Raw rows from VG (all LGAs): {total_raw}")
 
@@ -57,13 +62,11 @@ def main():
     for lga, rows in vg_by_lga.items():
         parsed = parse_vg_rows(rows)
         vg_rows.extend(parsed)
-        print(f"    - {lga}: {len(rows)} rows, parsed {len(parsed)}")
 
     print(f"[2] Parsed total rows: {len(vg_rows)}")
     filtered = apply_hard_filters(vg_rows)
     print(f"[3] After price/type filters (A$1–2m, house/townhouse/duplex/villa): {len(filtered)}")
 
-    # No enrichment yet; most rows won't meet 3x2x1 or 4+2+1+, but we still proceed
     label_categories(filtered)
     categories = {}
     for r in filtered:
@@ -78,12 +81,10 @@ def main():
     med = compute_medians(deduped, asof)
     print(f"[6] Median buckets computed: {len(med)}")
 
-    # Trends placeholders (none yet)
     trends = { r["_suburb"]: {"1y": (None,None), "5y": (None,None), "10y": (None,None)} for r in deduped }
 
-    os.makedirs("artifacts", exist_ok=True)
     write_outputs(deduped, med, trends, outdir="artifacts")
-    print("[7] Wrote outputs to artifacts/. Expect idx.json + up to 8 CSVs if any rows matched.")
+    print("[7] Wrote outputs to artifacts/. If zero rows matched, idx.json will still be created with empty lists.")
 
 if __name__ == "__main__":
     main()
